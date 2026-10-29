@@ -40,44 +40,85 @@
     lb.addEventListener('click',function(e){if(e.target===lb)lb.close();});
     lb.addEventListener('keydown',function(e){if(e.key==='ArrowLeft')op(cur-1);if(e.key==='ArrowRight')op(cur+1);});}
 })();
-/* okno usług: karuzela wachlarzowa, filtry, rezerwacja e-mailem */
+/* karuzela wachlarzowa sterowana przewijaniem */
+(function(){
+  var sec=document.getElementById('zabiegi');if(!sec)return;
+  var M=JSON.parse(document.getElementById('fc-data').textContent),N=M.length,start=+sec.dataset.start||0;
+  var cards=[].slice.call(sec.querySelectorAll('.fc-card')),still=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var P={0:[0,0,40,0,0,1,0],1:[222,18,-70,5,14,.84,.1],2:[378,60,-170,10.5,24,.7,.24],3:[500,110,-280,15,30,.58,.34]};
+  var cur=-1,prevD=cards.map(function(){return null;}),k=1;
+  sec.style.setProperty('--fc-n',N);
+  function scale(){var w=sec.clientWidth,hk=(innerHeight-sec.querySelector('.fc-head').offsetHeight-300)/414;k=Math.min(1,hk,Math.max(.5,(w<700?w*.58:w*.3)/300));k=Math.max(.45,k);sec.style.setProperty('--fc-k',k.toFixed(3));}
+  function off(i,a){var d=((i-a)%N+N)%N;if(d>N/2)d-=N;return d;}
+  function tf(d){var a=Math.min(Math.abs(d),3),s=d<0?-1:1,p=P[a];
+    return 'translate3d('+(s*p[0]*k).toFixed(1)+'px,'+(p[1]*k).toFixed(1)+'px,'+(p[2]*k).toFixed(1)+'px) rotateZ('+(s*p[3])+'deg) rotateY('+(s*p[4])+'deg) scale('+p[5]+')';}
+  function cap(a){var t=sec.querySelector('.fc-txt');t.querySelector('.fc-t').textContent=M[a].t;t.querySelector('.fc-d').textContent=M[a].d;t.querySelector('.fc-m').textContent=M[a].m;
+    sec.querySelector('.fc-rez').setAttribute('data-uslugi',M[a].kod);
+    if(!still&&t.animate)t.animate([{opacity:0,filter:'blur(5px)',transform:'translateY(10px)'},{opacity:1,filter:'blur(0px)',transform:'translateY(0)'}],{duration:600,easing:'cubic-bezier(.16,1,.3,1)'});}
+  function show(a,force){if(a===cur&&!force)return;cur=a;
+    cards.forEach(function(c,i){var d=off(i,a),ad=Math.abs(d),pd=prevD[i];
+      var jump=pd!==null&&Math.abs(d-pd)>3;if(jump){c.classList.add('no-t');}
+      c.style.transform=tf(d);c.style.opacity=ad>2?0:1;c.style.zIndex=10-Math.min(ad,4);c.style.pointerEvents=ad>2?'none':'';
+      c.querySelector('.fc-dim').style.opacity=P[Math.min(ad,3)][6];c.setAttribute('aria-hidden',ad>2);
+      if(jump){void c.offsetWidth;c.classList.remove('no-t');}prevD[i]=d;});
+    cap(a);}
+  function idx(){var r=sec.getBoundingClientRect(),run=sec.offsetHeight-innerHeight;var p=run>0?Math.min(1,Math.max(0,-r.top/run)):0;
+    sec.querySelector('.fc-prog span').style.width=(p*100).toFixed(1)+'%';return (start+Math.min(N-1,Math.floor(p*N)))%N;}
+  function goTo(a){var steps=((a-start)%N+N)%N,run=sec.offsetHeight-innerHeight,y=sec.getBoundingClientRect().top+scrollY+(steps+.5)/N*run;
+    window.scrollTo({top:y,behavior:still?'auto':'smooth'});}
+  var busy=false;addEventListener('scroll',function(){if(busy)return;busy=true;requestAnimationFrame(function(){busy=false;show(idx());});},{passive:true});
+  addEventListener('resize',function(){scale();show(cur<0?start:cur,true);});
+  sec.querySelector('.fc-prev').addEventListener('click',function(){goTo((cur-1+N)%N);});
+  sec.querySelector('.fc-next').addEventListener('click',function(){goTo((cur+1)%N);});
+  cards.forEach(function(c,i){c.addEventListener('click',function(){if(i===cur){sec.querySelector('.fc-rez').click();}else goTo(i);});});
+  var sx=null;sec.querySelector('.fc-stage').addEventListener('pointerdown',function(e){sx=e.clientX;});
+  sec.querySelector('.fc-stage').addEventListener('pointerup',function(e){if(sx===null)return;var dx=e.clientX-sx;sx=null;if(Math.abs(dx)>40)goTo((cur+(dx<0?1:-1)+N)%N);});
+  sec.addEventListener('keydown',function(e){if(e.key==='ArrowRight')goTo((cur+1)%N);if(e.key==='ArrowLeft')goTo((cur-1+N)%N);});
+  if('IntersectionObserver' in window)new IntersectionObserver(function(es){document.body.classList.toggle('fc-on',es[0].isIntersecting);},{threshold:.15}).observe(sec);
+  scale();show(idx(),true);
+})();
+/* okno usług i panel szczegółów (jak ponti.spa/zabiegi) */
 (function(){
   var dlg=document.getElementById('uslugi');if(!dlg)return;
-  var D=JSON.parse(document.getElementById('us-data').textContent),cards=[].slice.call(dlg.querySelectorAll('.fan-card')),vis=cards.slice(),act=0,kat=dlg.dataset.start||'Wszystkie';
-  var still=matchMedia('(prefers-reduced-motion: reduce)').matches,$=function(s){return dlg.querySelector(s);};
-  function lay(){var mob=innerWidth<700,step=mob?44:62,rot=mob?8:7;
-    cards.forEach(function(c){c.style.display='none';c.classList.remove('act');});
-    vis.forEach(function(c,k){var d=k-act,a=Math.abs(d);c.style.display='';
-      c.style.transform='translateX('+(d*step)+'%) translateY('+(a*a*2.2)+'%) rotate('+(d*rot)+'deg) scale('+Math.max(.7,1-a*.07)+')';
-      c.style.zIndex=100-a;c.style.opacity=a>3?0:1;c.style.pointerEvents=a>3?'none':'';if(!d)c.classList.add('act');});
-    var u=D[+vis[act].dataset.i];$('.us-kat').textContent=u.kat;$('.us-nazwa').textContent=u.nazwa;$('.us-czas').textContent='Czas: '+u.czas;
-    $('.us-opis').textContent=u.opis;$('.us-dla').textContent=u.dla||'';
-    $('.us-zaw').innerHTML=(u.zawiera||[]).map(function(x){return '<li>W cenie: '+x.replace(/[<>&]/g,'')+'</li>';}).join('');
-    $('.fan-n').textContent=(act+1)+' / '+vis.length;}
-  function go(n){act=(n+vis.length)%vis.length;lay();}
-  function filtr(k){kat=k;vis=cards.filter(function(c){return k==='Wszystkie'||c.dataset.kat===k;});act=Math.min(act,vis.length-1);if(act<0)act=0;
-    dlg.querySelectorAll('.us-chip').forEach(function(b){b.classList.toggle('on',b.dataset.kat===k);});go(Math.floor((vis.length-1)/2));}
-  function open(id){$('.us-form').hidden=true;id=id||dlg.dataset.focus;
-    if(id){filtr(kat);if(!vis.some(function(c){return D[+c.dataset.i].id===id;}))filtr('Wszystkie');var k=vis.findIndex(function(c){return D[+c.dataset.i].id===id;});if(k>=0)act=k;lay();}else filtr(kat);
-    if(!dlg.open)dlg.showModal();document.documentElement.style.overflow='hidden';}
-  dlg.addEventListener('close',function(){document.documentElement.style.overflow='';});
+  var Dd=JSON.parse(document.getElementById('zk-data').textContent),C=Dd.cfg,K={};Dd.karty.forEach(function(c){K[c.kod]=c;});
+  var zp=dlg.querySelector('.zp'),zin=zp.querySelector('.zp-in');
+  function esc(s){return String(s||'').replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+  function zl(v){return String(v).replace(/\B(?=(\d{3})+(?!\d))/g,' ')+' zł';}
+  function link(id){return C.baza+'/personal/select-time?o=s'+id+'&'+C.utm;}
+  function linkStrefa(){return C.baza+'/activity/select?o=act'+new Date().toISOString().slice(0,10)+'&'+C.utm;}
+  function szczegoly(c,st){st=st||{w:0,o:0};var w=c.warianty[st.w]||c.warianty[0];
+    var h='<p class="zp-krok">'+esc(c.katNazwa)+'</p><h3>'+esc(c.nazwa)+'</h3><div class="zp-gal"><div class="zp-tor">';
+    c.galeria.forEach(function(g,i){h+='<figure><img src="'+g.src+'" alt="'+esc(g.alt||c.nazwa)+'"'+(i?' loading="lazy"':'')+'/>'+(g.podpis?'<figcaption>'+esc(g.podpis)+'</figcaption>':'')+'</figure>';});
+    h+='</div>'+(c.galeria.length>1?'<button type="button" class="zp-strz zp-wstecz" aria-label="Poprzednie zdjęcie">‹</button><button type="button" class="zp-strz zp-dalej" aria-label="Następne zdjęcie">›</button><span class="zp-licz">1 / '+c.galeria.length+'</span>':'')+'</div>';
+    h+='<p class="zp-opis">'+esc(c.opis)+'</p>'+(c.opisPo?'<p class="zp-opis">'+esc(c.opisPo)+'</p>':'');
+    h+='<span class="zp-et">'+esc(c.przebiegTytul)+'</span><ul class="zp-lista">'+c.przebieg.map(function(p){return '<li>'+esc(p)+'</li>';}).join('')+'</ul>';
+    h+='<span class="zp-et">Dla kogo</span><p class="zp-dla">'+esc(c.dlaKogo)+'</p>';
+    var cena=zl(w.cena),czas=w.czas+' min';
+    if(c.kod==='strefa-wylacznosc'){var o=C.wyl[st.o]||C.wyl[0];h+='<span class="zp-et">Liczba osób</span><div class="zetony">'+C.wyl.map(function(x,i){return '<button type="button" class="zeton'+(i===st.o?' wybrany':'')+'" data-o="'+i+'">'+esc(x.osoby)+' <small>'+esc(x.cena)+'</small></button>';}).join('')+'</div>';cena=o.cena;czas=(o.od<3?'2':'3')+' godz.';}
+    else if(c.warianty.length>1){h+='<span class="zp-et">Długość</span><div class="zetony">'+c.warianty.map(function(x,i){return '<button type="button" class="zeton'+(i===st.w?' wybrany':'')+'" data-w="'+i+'">'+x.czas+' min <small>'+zl(x.cena)+'</small></button>';}).join('')+'</div>';}
+    h+='<div class="zp-podsum"><div><b>'+esc(c.nazwa)+'</b><small>'+czas+(c.cenaDopisek?' · '+esc(c.cenaDopisek):'')+'</small></div><span class="zp-cena">'+cena+'</span></div>';
+    h+='<button type="button" class="btn btn-gold zp-rez">Zarezerwuj</button>';
+    zin.innerHTML=h;zin.scrollTop=0;
+    var tor=zin.querySelector('.zp-tor'),lc=zin.querySelector('.zp-licz');
+    if(lc){tor.addEventListener('scroll',function(){lc.textContent=(Math.round(tor.scrollLeft/tor.clientWidth)+1)+' / '+c.galeria.length;},{passive:true});
+      zin.querySelector('.zp-wstecz').onclick=function(){tor.scrollBy({left:-tor.clientWidth,behavior:'smooth'});};
+      zin.querySelector('.zp-dalej').onclick=function(){tor.scrollBy({left:tor.clientWidth,behavior:'smooth'});};}
+    [].forEach.call(zin.querySelectorAll('[data-w]'),function(b){b.onclick=function(){szczegoly(c,{w:+b.dataset.w,o:0});};});
+    [].forEach.call(zin.querySelectorAll('[data-o]'),function(b){b.onclick=function(){szczegoly(c,{w:0,o:+b.dataset.o});};});
+    zin.querySelector('.zp-rez').onclick=function(){
+      var url=null;if(c.kod==='strefa-dzielona')url=linkStrefa();else if(c.kod==='strefa-wylacznosc')url=link((C.wyl[st.o]||C.wyl[0]).usluga);else if(w.altegio)url=link(w.altegio);
+      if(url){window.open(url,'_blank','noopener');return;}
+      zin.innerHTML='<button type="button" class="zp-wroc">‹ Opis zabiegu</button><p class="zp-krok">Rezerwacja</p><h3>'+esc(c.nazwa)+'</h3><div class="zp-info"><b>Ten zabieg rezerwujemy telefonicznie</b><br/>Zadzwoń: '+esc(C.tel)+'. Dobierzemy dogodny termin.</div><div class="zp-akcje"><a class="btn btn-gold" href="tel:'+C.telH+'">Zadzwoń</a><button type="button" class="btn btn-line zp-inne">Inne zabiegi online →</button></div>';
+      zin.querySelector('.zp-wroc').onclick=function(){szczegoly(c,st);};zin.querySelector('.zp-inne').onclick=zamknijPanel;};
+    zp.hidden=false;requestAnimationFrame(function(){zp.classList.add('on');});}
+  function zamknijPanel(){zp.classList.remove('on');}
+  function open(kod){if(!dlg.open)dlg.showModal();document.documentElement.style.overflow='hidden';dlg.querySelector('.zk-in').scrollTop=0;
+    if(kod&&K[kod])szczegoly(K[kod]);else zamknijPanel();}
+  dlg.addEventListener('close',function(){document.documentElement.style.overflow='';zp.classList.remove('on');});
   document.addEventListener('click',function(e){var b=e.target.closest&&e.target.closest('[data-uslugi]');if(!b)return;e.preventDefault();e.stopPropagation();
     var m=document.getElementById('menu');if(m)m.classList.remove('open');open(b.getAttribute('data-uslugi'));},true);
-  $('.us-x').addEventListener('click',function(){dlg.close();});
+  dlg.querySelector('.zk-x').onclick=function(){dlg.close();};zp.querySelector('.zp-x').onclick=zamknijPanel;
   dlg.addEventListener('click',function(e){if(e.target===dlg)dlg.close();});
-  $('.fan-p').addEventListener('click',function(){go(act-1);});$('.fan-nx').addEventListener('click',function(){go(act+1);});
-  dlg.querySelectorAll('.us-chip').forEach(function(b){b.addEventListener('click',function(){filtr(b.dataset.kat);});});
-  var sx=null,moved=false;
-  $('.fan').addEventListener('pointerdown',function(e){sx=e.clientX;moved=false;});
-  $('.fan').addEventListener('pointerup',function(e){if(sx===null)return;var dx=e.clientX-sx;sx=null;if(Math.abs(dx)>40){moved=true;go(act+(dx<0?1:-1));}});
-  cards.forEach(function(c){c.addEventListener('click',function(){if(moved){moved=false;return;}var k=vis.indexOf(c);if(k===act){$('.us-rez').click();}else go(k);});});
-  dlg.addEventListener('keydown',function(e){if(e.target.closest&&e.target.closest('input,select'))return;if(e.key==='ArrowLeft')go(act-1);if(e.key==='ArrowRight')go(act+1);});
-  var wh=null;$('.fan').addEventListener('wheel',function(e){if(Math.abs(e.deltaX)<Math.abs(e.deltaY)||wh)return;e.preventDefault();go(act+(e.deltaX>0?1:-1));wh=setTimeout(function(){wh=null;},450);},{passive:false});
-  addEventListener('resize',function(){if(dlg.open)lay();});
-  $('.us-rez').addEventListener('click',function(){var f=$('.us-form');f.hidden=false;var u=D[+vis[act].dataset.i];
-    f.querySelector('[name=o]').value=/dwojga/i.test(u.nazwa)?'2':'1';f.scrollIntoView({behavior:still?'auto':'smooth',block:'center'});f.querySelector('input').focus({preventScroll:true});});
-  function pl(s){var p=(s||'').split('-');return p.length===3?p[2]+'.'+p[1]+'.'+p[0]:s;}
-  $('.us-form').addEventListener('submit',function(e){e.preventDefault();var f=e.target,u=D[+vis[act].dataset.i];
-    var body='Dzień dobry,\n\nproszę o rezerwację: '+u.nazwa+' ('+u.czas+').\nDzień: '+pl(f.d.value)+'\nPora: '+f.p.value+'\nLiczba osób: '+f.o.value+'\nTelefon: \n\nPozdrawiam';
-    location.href='mailto:'+dlg.dataset.mail+'?subject='+encodeURIComponent('Rezerwacja: '+u.nazwa+' '+pl(f.d.value))+'&body='+encodeURIComponent(body);});
+  dlg.addEventListener('cancel',function(e){if(zp.classList.contains('on')){e.preventDefault();zamknijPanel();}});
+  [].forEach.call(dlg.querySelectorAll('.zk-kafel'),function(el){el.addEventListener('click',function(){szczegoly(K[el.dataset.kod]);});el.addEventListener('keydown',function(e){if(e.key==='Enter')szczegoly(K[el.dataset.kod]);});});
 })();
